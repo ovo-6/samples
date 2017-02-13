@@ -7,6 +7,7 @@ import com.ovo6.poll.view.QuestionListView;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -27,6 +28,13 @@ public class QuestionController {
     @RequestMapping("/questions/{id}")
     Question getQuestion(@PathVariable Integer id) {
         return repo.findOne(id);
+    }
+
+    @RequestMapping(value = "/questions/{id}/vote", method = RequestMethod.POST)
+    Question vote(@PathVariable Integer id) {
+        Question question = repo.findOne(id);
+        question.setVotes(question.getVotes()+1);
+        return repo.save(question);
     }
 
 

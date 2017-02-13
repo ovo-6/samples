@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Sample Polling Application Using Spring Boot and React</title>
+
+    <script src="https://unpkg.com/react@15.3.0/dist/react.js"></script>
+    <script src="https://unpkg.com/react-dom@15.3.0/dist/react-dom.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6.15.0/babel.min.js"></script>
+    <script src="https://unpkg.com/jquery@3.1.0/dist/jquery.min.js"></script>
+
+    <!-- You can add Bootstrap to make the table look nice -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+
+</head>
+<body>
+<div id="content"></div>
+
+<script type="text/babel">
+
+    class App extends React.Component {
+
+        constructor(props) {
+            super(props);
+            this.state = {questions: []};
+        }
+
+        loadQuestions() {
+            var self = this;
+            $.ajax({
+                url: "/questions"
+            }).then(function (data) {
+                self.setState({questions: data});
+            });
+        }
+
+        componentDidMount() {
+            this.loadQuestions();
+        }
+
+        render() {
+            return (
+                    <Questions data={this.state.questions}/>
+            )
+        }
+    }
+
+    class Questions extends React.Component{
+        render() {
+            var questions = this.props.data.map(question =>
+                    <Question key={question.id} data={question}/>
+            );
+            return (
+                    <div className="container">
+                    <table className="table table-striped">
+                        <tbody>
+                        <tr>
+                            <th>Question</th>
+                            <th>Date</th>
+                            <th>Author</th>
+                            <th>Answers</th>
+                            <th>Votes</th>
+                            <th></th>
+                        </tr>
+                        {questions}
+                        </tbody>
+                    </table>
+                    </div>
+            )
+        }
+    }
+
+    class Question extends React.Component{
+
+        constructor(props) {
+            super(props);
+            this.state = props;
+        }
+
+        handleVote() {
+            var self = this;
+            $.ajax({
+                url: '/questions/' + self.props.data.id + '/vote',
+                type: 'POST',
+                dataType: 'json',
+                success: function(result) {
+                    self.state.data.votes++;
+                    self.setState(self.state);
+                }
+            });
+        }
+
+        render() {
+            return (
+                    <tr>
+                        <td>{this.state.data.text}</td>
+                        <td>{new Date(this.state.data.created).toLocaleString()}</td>
+                        <td>{this.state.data.author.name}</td>
+                        <td>{this.state.data.answerCount}</td>
+                        <td>{this.state.data.votes}</td>
+                        <td>
+                            <button className="btn btn-info" onClick={this.handleVote.bind(this)}>Vote</button>
+                        </td>
+                    </tr>
+            )
+        }
+    }
+
+
+    ReactDOM.render(
+            <App />,
+            document.getElementById('content')
+    );
+</script>
+</body>
+</html>
