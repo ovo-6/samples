@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Expenses App</title>
+
+    <script src="https://unpkg.com/react@15.3.0/dist/react.js"></script>
+    <script src="https://unpkg.com/react-dom@15.3.0/dist/react-dom.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6.15.0/babel.min.js"></script>
+    <script src="https://unpkg.com/jquery@3.1.0/dist/jquery.min.js"></script>
+    <script src="//unpkg.com/moment@2.10.6/min/moment-with-locales.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-bootstrap/0.30.7/react-bootstrap.js"></script>
+
+    <!-- You can add Bootstrap to make the table look nice -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+
+    <script type="text/javascript" src="js/lib/react-datetime.js"></script>
+    <link rel="stylesheet" href="/js/lib/react-datetime.css">
+
+    <script type="text/babel" src="js/user.js"></script>
+    <script type="text/babel" src="js/users.js"></script>
+    <script type="text/babel" src="js/expenseRow.js"></script>
+    <script type="text/babel" src="js/expenses.js"></script>
+    <script type="text/babel" src="js/newExpenseDialog.js"></script>
+    <script type="text/babel" src="js/loginDialog.js"></script>
+    <script type="text/babel" src="js/editUserDialog.js"></script>
+
+    <style>
+        @media print {
+            .no-print, .no-print * {
+                display: none !important;
+            }
+        }
+    </style>
+
+</head>
+<body>
+<div id="content"></div>
+
+<script type="text/babel">
+
+const initialState = {
+   accountCreated: false, showLogin: true, token: null, username: '', userRole: '', loginErrorText: '',
+   users: [], usersNextLink: null, usersPrevLink: null, usersPageInfo: {number:-1,totalPages:0},
+   expenses: [], expensesNextLink: null, expensesPrevLink: null, expensesPageInfo: {number:-1,totalPages:0},
+   showNewExpenseDialog: false, saveExpenseErrorText: '', existingExpenseToSave: null,
+   usersLink: '/api/users?page=0&size=10', expensesLink: '/api/expenses?page=0&size=10',
+   selectedTabKey: 1, createAccountExpanded: false, totalAmount: 0, averageAmount: 0,
+   showNewUserDialog: false, saveUserErrorText: '', existingUserToSave: null, myExpensesSelected: true
+};
+
+class App extends React.Component {
+
+        constructor(props) {
+            super(props);
+            this.state = initialState;
+            this.login = this.login.bind(this);
+            this.logout = this.logout.bind(this);
+            this.createAccount = this.createAccount.bind(this);
+            this.saveUser = this.saveUser.bind(this);
+
+            this.nextPageUsers = this.nextPageUsers.bind(this);
+            this.prevPageUsers = this.prevPageUsers.bind(this);
+            this.deleteUser = this.deleteUser.bind(this);
+            this.showNewUserDialog = this.showNewUserDialog.bind(this);
+            this.hideNewUserDialog = this.hideNewUserDialog.bind(this);
+            this.editUser = this.editUser.bind(this);
+
+            this.nextPageExpenses = this.nextPageExpenses.bind(this);
+            this.prevPageExpenses = this.prevPageExpenses.bind(this);
+            this.deleteExpense = this.deleteExpense.bind(this);
+            this.saveExpense = this.saveExpense.bind(this);
+            this.editExpense = this.editExpense.bind(this);
+            this.showNewExpenseDialog = this.showNewExpenseDialog.bind(this);
+            this.hideNewExpenseDialog = this.hideNewExpenseDialog.bind(this);
+
+            this.reloadUsers = this.reloadUsers.bind(this);
+            this.reloadExpenses = this.reloadExpenses.bind(this);
+            this.handleUserManagementSelected = this.handleUserManagementSelected.bind(this);
+            this.handleMyExpensesSelected = this.handleMyExpensesSelected.bind(this);
+
+            this.expandCreateAccount = this.expandCreateAccount.bind(this);
+            this.submitSearchFilter = this.submitSearchFilter.bind(this);
+            this.loadStats = this.loadStats.bind(this);
+        }
+
+        login(event) {
+            event.preventDefault();
+
+            var username = event.target.username.value;
+            var password = event.target.password.value;
+
+            var self = this;
+
+            $.ajax({
+                type: 'POST',
+                url: '/login',
+                data: JSON.stringify({username: username, password: password}),
+                success: function(res, status, xhr) {
+                    var token = xhr.getResponseHeader('Authorization').substr(7);
+                    self.setState({showLogin: false, token: token, username: username, userRole: res.role});
+
+                    if (self.state.userRole != 'ROLE_USER_MANAGER') {
+                        self.handleMyExpensesSelected();
+                    }
+                    else {
+                        self.handleUserManagementSelected();
+                    }
+
+                },
+                contentType: "application/json",
+                dataType: 'json',
+                error: function (xhr, status, error) {
+                    self.setState({loginErrorText: JSON.parse(xhr.responseText).message});
+                 }
+            });
+        }
+
+        logout() {
+            this.setState(initialState);
+        }
+
+        createAccount(event) {
+            event.preventDefault();
+
+            var username = event.target.username.value;
+            var password = event.target.password.value;
+            var email = event.target.email.value;
+
+            var self = this;
+
+            $.ajax({
+                type: 'POST',
+                url: '/signup',
+                data: JSON.stringify({name: username, password: password, email: email}),
+                success: function(res, status, xhr) {
+                    self.setState({accountCreated: true});
+                },
+                contentType: "application/json",
+                dataType: 'json',
+                error: function (xhr, status, error) {
+                    self.setState({newAccountErrorText: JSON.parse(xhr.responseText).message});
+                 }
+            });
+        }
+
+        hideNewUserDialog() {
+            this.setState({showNewUserDialog: false, existingUserToSave: null});
+        }
+
+        showNewUserDialog() {
+            this.setState({showNewUserDialog: true, existingUserToSave: null});
+        }
+
+        editUser(data) {
+            this.showNewUserDialog();
+            this.setState({existingUserToSave: data});
+        }
+
+        saveUser(event) {
+            event.preventDefault();
+
+            var username = event.target.username.value;
+            var password = event.target.password.value;
+            var email = event.target.email.value;
+            var role = event.target.role.value;
+
+            var existingUser = event.target.existingUser.value;
+            var method = (existingUser == '')? 'POST': 'PUT';
+            var url = (existingUser == '')? '/api/users': existingUser;
+
+            var self = this;
+
+            $.ajax({
+                type: method,
+                url: url,
+                beforeSend: function(xhr){
+                    xhr.setRequestHeader('Authorization', self.state.token);
+                },
+                data: JSON.stringify({
+                        name: username, password: password, email: email, roles: [role]
+                        }),
+                success: function(res, status, xhr) {
+                    self.setState({saveUserErrorText: ''});
+                    self.hideNewUserDialog();
+                    self.reloadUsers();
+                },
+                contentType: "application/json",
+                dataType: 'json',
+                error: function (xhr, status, error) {
+                    self.setState({saveUserErrorText: JSON.parse(xhr.responseText).message});
+                 }
+            });
+        }
+
+        loadUsers(url) {
+            var self = this;
+            $.ajax({
+                url: url,
+                beforeSend: function(xhr){
+                    xhr.setRequestHeader('Authorization', self.state.token);
+                }
+            }).then(function (data) {
+                var next = (data._links.next != null)? data._links.next.href: null;
+                var prev = (data._links.prev != null)? data._links.prev.href: null;
+                self.setState({
+                    users: data._embedded.users,
+                    usersNextLink: next,
+                    usersPrevLink: prev,
+                    usersLink: url,
+                    usersPageInfo: data.page
+                 });
+            });
+        }
+
+        nextPageUsers() {
+            this.loadUsers(this.state.usersNextLink);
+        }
+
+        prevPageUsers() {
+            this.loadUsers(this.state.usersPrevLink);
+        }
+
+        reloadUsers() {
+            this.loadUsers(this.state.usersLink);
+        }
+
+        deleteUser(name, url) {
+            var self = this;
+            if  (confirm("Are you sure to delete user " + name + " ?")) {
+                $.ajax({
+                    url: url,
+                    type: 'DELETE',
+                    beforeSend: function(xhr){
+                        xhr.setRequestHeader('Authorization', self.state.token);
+                    },
+                    success: function(){
+                        self.reloadUsers();
+                    }
+                  });
+            }
+        }
+
+        loadExpenses(url) {
+            var self = this;
+
+            self.setState({expensesLink: url});
+
+            $.ajax({
+                url: url,
+                beforeSend: function(xhr){
+                    xhr.setRequestHeader('Authorization', self.state.token);
+                }
+            }).then(function (data) {
+                var next = (data._links.next != null)? data._links.next.href: null;
+                var prev = (data._links.prev != null)? data._links.prev.href: null;
+                self.setState({
+                    expenses: data._embedded.expenses,
+                    expensesNextLink: next,
+                    expensesPrevLink: prev,
+                    expensesPageInfo: data.page
+                 });
+            });
+        }
+
+        nextPageExpenses() {
+            this.loadExpenses(this.state.expensesNextLink);
+        }
+
+        prevPageExpenses() {
+            this.loadExpenses(this.state.expensesPrevLink);
+        }
+
+        reloadExpenses() {
+            this.loadExpenses(this.state.expensesLink);
+            this.loadStats();
+        }
+
+        deleteExpense(name, url) {
+            var self = this;
+            if  (confirm("Are you sure to delete expense '" + name + "' ?")) {
+                $.ajax({
+                    url: url,
+                    type: 'DELETE',
+                    beforeSend: function(xhr){
+                        xhr.setRequestHeader('Authorization', self.state.token);
+                    },
+                    success: function(){
+                        self.reloadExpenses();
+                    }
+                  });
+            }
+        }
+
+        showNewExpenseDialog() {
+            this.setState({showNewExpenseDialog: true, existingExpenseToSave: null});
+        }
+
+        hideNewExpenseDialog() {
+            this.setState({showNewExpenseDialog: false});
+        }
+
+        handleMyExpensesSelected() {
+          this.reloadExpenses();
+          this.setState({myExpensesSelected: true});
+        }
+
+        handleUserManagementSelected() {
+          this.reloadUsers();
+          this.setState({myExpensesSelected: false});
+        }
+
+        expandCreateAccount() {
+            this.setState({createAccountExpanded: true});
+        }
+
+        saveExpense(event) {
+            event.preventDefault();
+
+            var datetime = new Date(event.target.datetime.value).toISOString();
+            var description = event.target.description.value;
+            var amount = event.target.amount.value;
+            var comment = event.target.comment.value;
+            var existingExpense = event.target.existingExpense.value;
+
+            var method = (existingExpense == '')? 'POST': 'PUT';
+            var url = (existingExpense == '')? '/api/expenses': existingExpense;
+
+            var self = this;
+
+            $.ajax({
+                type: method,
+                url: url,
+                beforeSend: function(xhr){
+                    xhr.setRequestHeader('Authorization', self.state.token);
+                },
+                data: JSON.stringify({datetime: datetime, description: description, amount: amount, comment: comment}),
+                success: function(res, status, xhr) {
+                    self.setState({saveExpenseErrorText: ''});
+                    self.hideNewExpenseDialog();
+                    self.reloadExpenses();
+                },
+                contentType: "application/json",
+                dataType: 'json',
+                error: function (xhr, status, error) {
+                    self.setState({saveExpenseErrorText: JSON.parse(xhr.responseText).message});
+                 }
+            });
+        }
+
+        editExpense(data) {
+            this.showNewExpenseDialog();
+            this.setState({existingExpenseToSave: data});
+        }
+
+        getCurrentWeek() {
+           var date = new Date();
+           date.setHours(0, 0, 0, 0);
+          // Thursday in current week decides the year.
+          date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+          // January 4 is always in week 1.
+          var week1 = new Date(date.getFullYear(), 0, 4);
+          // Adjust to Thursday in week 1 and count number of weeks from date to week1.
+          return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000
+                                - 3 + (week1.getDay() + 6) % 7) / 7);
+        }
+
+        getDateOfISOWeek(w, y) {
+            var simple = new Date(y, 0, 1 + (w - 1) * 7);
+            var dow = simple.getDay();
+            var ISOweekStart = simple;
+            if (dow <= 4)
+                ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+            else
+                ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+            return ISOweekStart;
+        }
+
+        submitSearchFilter(event) {
+            event.preventDefault();
+
+            var description = event.target.searchDescription.value;
+            var minAmount = event.target.searchMinAmount.value;
+            if (minAmount=='') minAmount = '0';
+            var maxAmount = event.target.searchMaxAmount.value;
+            if (maxAmount=='') maxAmount = '1000000';
+
+            var month = event.target.searchMonth.value;
+            var week = event.target.searchWeek.value;
+            var year = new Date().getYear()-100+2000;
+
+            var startDate = '1900-01-01T00:00:00.000Z';
+            var endDate = '3000-01-01T00:00:00.000Z';
+            if (month != '0') {
+                var intMonth = parseInt(month);
+                startDate = new Date(year, intMonth-1, 1, 0, 0, 0, 0).toISOString();
+                endDate = new Date(year, intMonth, 1, 0, 0, 0, 0).toISOString();
+            }
+            else if (week != 'All') {
+                var start = this.getDateOfISOWeek(parseInt(week), year);
+                startDate = start.toISOString();
+                endDate = new Date(start.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString();
+            }
+
+            var url = '/api/expenses/search/filter?page=0&size=10';
+            url += '&description=' + description;
+
+            url += '&minAmount=' + minAmount;
+            url += '&maxAmount=' + maxAmount;
+            url += '&startDate=' + startDate;
+            url += '&endDate=' + endDate;
+
+            this.loadExpenses(url);
+            this.loadStats(url);
+        }
+
+        loadStats(url) {
+            // call stats with the same params as expenses
+            if (url == null) url = this.state.expensesLink;
+
+            var params = url.substr(url.indexOf("?"));
+            var self = this;
+            $.ajax({
+                url: '/api/expenses/stats' + params,
+                beforeSend: function(xhr){
+                    xhr.setRequestHeader('Authorization', self.state.token);
+                }
+            }).then(function (data) {
+                self.setState({
+                    totalAmount: self.round(data.sum),
+                    averageAmount: self.round(data.avg)
+                 });
+            });
+        }
+
+        round(num) {
+            return Math.round(num * 100) / 100;
+        }
+
+        render() {
+
+            var months = ['All', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            var currentMonth = new Date().getMonth()+1;
+
+            var weeks = [];
+            for (var i = 1; i < 53; i++) {
+              weeks.push(i);
+            }
+            var currentWeek = this.getCurrentWeek();
+
+            var myExpensesNavItem = null;
+            var userManagementNavItem = null;
+
+            if (this.state.userRole!='ROLE_USER') {
+                userManagementNavItem = <ReactBootstrap.NavItem
+                    active={!this.state.myExpensesSelected}
+                    onSelect={this.handleUserManagementSelected}
+                 >
+                    User Management
+                </ReactBootstrap.NavItem>;
+            }
+
+            if (this.state.userRole!='ROLE_USER_MANAGER') {
+                myExpensesNavItem = <ReactBootstrap.NavItem
+                                        active={this.state.myExpensesSelected}
+                                        onSelect={this.handleMyExpensesSelected}
+                                        disabled={this.state.userRole=='ROLE_USER_MANAGER'}
+                                     >
+                                        My Expenses
+                                    </ReactBootstrap.NavItem>;
+            }
+
+        return (
+        <div>
+        <ReactBootstrap.Navbar hidden={this.state.showLogin}>
+            <ReactBootstrap.Navbar.Header>
+              <ReactBootstrap.Navbar.Brand>
+                Expenses App
+              </ReactBootstrap.Navbar.Brand>
+            </ReactBootstrap.Navbar.Header>
+
+
+            <ReactBootstrap.Nav>
+                {myExpensesNavItem}
+                {userManagementNavItem}
+             </ReactBootstrap.Nav>
+
+             <ReactBootstrap.Nav pullRight>
+              <ReactBootstrap.NavDropdown eventKey={1} title={this.state.username} id="basic-nav-dropdown" pullRight>
+                <ReactBootstrap.MenuItem eventKey={1.1} onSelect={this.logout}>Logout</ReactBootstrap.MenuItem>
+              </ReactBootstrap.NavDropdown>
+            </ReactBootstrap.Nav>
+         </ReactBootstrap.Navbar>
+
+
+         <ReactBootstrap.Panel hidden={!this.state.myExpensesSelected | this.state.showLogin}>
+
+                <ReactBootstrap.Grid>
+                    <ReactBootstrap.Row>
+                      <ReactBootstrap.Col xs={2} md={2}>
+                        <br/>
+
+                        <ReactBootstrap.Button className="btn btn-info no-print" onClick={this.showNewExpenseDialog} >
+                            <ReactBootstrap.Glyphicon glyph="plus-sign" />
+                        </ReactBootstrap.Button>
+                        &nbsp;&nbsp;
+                        <ReactBootstrap.Button className="btn btn-info no-print" onClick={() => {print()}}>
+                            <ReactBootstrap.Glyphicon glyph="print" />
+                        </ReactBootstrap.Button>
+
+                        <br/><br/>
+                        <form onSubmit={this.submitSearchFilter}>
+                        Search Filters: <br/><br/>
+                        Month: <ReactBootstrap.FormControl componentClass="select" id="searchMonth">
+                                {
+                                    months.map(function(month, index) {
+                                        var style = (months[currentMonth]==month)? 'bold': 'normal';
+                                        return <option style={{fontWeight: style}} key={month} value={index}>{month}</option>;
+                                      })
+                                }
+                                </ReactBootstrap.FormControl>
+
+                                <br/>
+                        Week: <ReactBootstrap.FormControl componentClass="select" id="searchWeek">
+                                <option key="All" value="All">All</option>;
+                                {
+                                    weeks.map(function(week) {
+                                        var style = (currentWeek==week)? 'bold': 'normal';
+                                        return <option style={{fontWeight: style}} key={week} value={week}>{week}</option>;
+                                      })
+                                }
+                                </ReactBootstrap.FormControl>
+                                <br/>
+
+                        Min Amount:  <ReactBootstrap.FormControl type="text" id="searchMinAmount" />
+                        Max Amount:  <ReactBootstrap.FormControl type="text" id="searchMaxAmount" />
+                        <br/>
+                        Description: <ReactBootstrap.FormControl type="text" id="searchDescription" />
+                        <br/>
+
+                        <ReactBootstrap.Button className="btn btn-info no-print" type="submit">Set Filter</ReactBootstrap.Button>
+
+                        </form>
+                      </ReactBootstrap.Col>
+
+                      <ReactBootstrap.Col xs={6} md={6}>
+                        <br/>
+                        <Expenses
+                            data={this.state.expenses}
+                            nextPageHandler={this.nextPageExpenses}
+                            prevPageHandler={this.prevPageExpenses}
+                            prevDisabled={(this.state.expensesPrevLink == null)}
+                            nextDisabled={(this.state.expensesNextLink == null)}
+                            editExpenseHandler={this.editExpense}
+                            deleteExpenseHandler={this.deleteExpense}
+                            pageInfo={this.state.expensesPageInfo}
+                            totalAmount={this.state.totalAmount}
+                            averageAmount={this.state.averageAmount}
+                            showOwner={this.state.userRole=='ROLE_ADMIN'}
+                         />
+
+                      </ReactBootstrap.Col>
+
+                    </ReactBootstrap.Row>
+                  </ReactBootstrap.Grid>
+
+
+
+
+           </ReactBootstrap.Panel>
+
+           <ReactBootstrap.Panel hidden={this.state.myExpensesSelected | this.state.showLogin }>
+                <br/>
+                <Users
+                    data={this.state.users}
+                    nextPageHandler={this.nextPageUsers}
+                    prevPageHandler={this.prevPageUsers}
+                    prevDisabled={(this.state.usersPrevLink == null)}
+                    nextDisabled={(this.state.usersNextLink == null)}
+                    newUserHandler={this.showNewUserDialog}
+                    editUserHandler={this.editUser}
+                    deleteUserHandler={this.deleteUser}
+                    pageInfo={this.state.usersPageInfo}
+                 />
+           </ReactBootstrap.Panel>
+
+         <Login show={this.state.showLogin}
+            accountCreated={this.state.accountCreated}
+            expandCreateAccountHandler={this.expandCreateAccount}
+            createAccountExpanded={this.state.createAccountExpanded}
+            createAccountHandler={this.createAccount}
+            newAccountErrorText={this.state.newAccountErrorText}
+            loginErrorText={this.state.loginErrorText}
+            loginHandler={this.login}
+        />
+
+        <NewExpenseDialog
+            show={this.state.showNewExpenseDialog}
+            editObject={this.state.existingExpenseToSave}
+            submitHandler={this.saveExpense}
+            onHide={this.hideNewExpenseDialog}
+            errorText={this.state.saveExpenseErrorText}
+         />
+
+         <EditUserDialog
+            show={this.state.showNewUserDialog}
+            saveUserHandler={this.saveUser}
+            saveUserErrorText={this.state.saveUserErrorText}
+            onHide={this.hideNewUserDialog}
+            editObject={this.state.existingUserToSave}
+         />
+
+
+
+        </div>
+        )
+    }
+}
+
+ReactDOM.render(
+        <App />,
+        document.getElementById('content')
+);
+
+</script>
+</body>
+</html>
