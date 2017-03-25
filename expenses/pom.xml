@@ -13,6 +13,10 @@
         <version>1.4.3.RELEASE</version>
     </parent>
 
+    <properties>
+        <cucumber.version>1.2.4</cucumber.version>
+    </properties>
+
     <dependencies>
 
         <dependency>
@@ -57,6 +61,29 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>1.4.191</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- cucumber -->
+
+        <dependency>
+            <groupId>info.cukes</groupId>
+            <artifactId>cucumber-java</artifactId>
+            <version>${cucumber.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>info.cukes</groupId>
+            <artifactId>cucumber-junit</artifactId>
+            <version>${cucumber.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>info.cukes</groupId>
+            <artifactId>cucumber-spring</artifactId>
+            <version>${cucumber.version}</version>
             <scope>test</scope>
         </dependency>
 
