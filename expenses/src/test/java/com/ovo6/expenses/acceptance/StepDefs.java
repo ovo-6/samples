@@ -49,9 +49,20 @@ public class StepDefs {
         assertThat(response.getHeaders().get("Authorization")).isNotEmpty();
     }
 
+    @Then("^no auth token should be returned$")
+    public void no_auth_token_should_be_returned() throws Throwable {
+        assertThat(response.getHeaders().get("Authorization")).isNullOrEmpty();
+    }
+
+
     @Then("^(.*) role should be returned$")
     public void role_should_be_returned(String role) throws Throwable {
         assertThat(response.getBody()).isEqualTo("{\"role\": \"" + role + "\"}");
+    }
+
+    @Then("^response body does not contain any roles$")
+    public void response_body_should_be_empty() throws Throwable {
+        assertThat(response.getBody()).doesNotContain("\"role\"");
     }
 
     @Given("^(.*) signed up with password (.*)$")

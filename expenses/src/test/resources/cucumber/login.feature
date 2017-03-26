@@ -4,6 +4,8 @@ Feature: Testing a login
   Scenario: Invalid login
     When admin logs in with password invalid
     Then the server should handle it and return a UNAUTHORIZED status
+    And no auth token should be returned
+    And response body does not contain any roles
 
   Scenario: Admin login
     When admin logs in with password admin
